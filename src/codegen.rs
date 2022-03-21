@@ -1,26 +1,43 @@
-use inkwell::{context::Context, module::Module, builder::Builder, values::BasicValueEnum};
+use inkwell::{context::Context, module::Module, builder::Builder, values::BasicValueEnum, types::BasicMetadataTypeEnum};
 
 use crate::parser::{Operation, Proc};
 
 #[derive(Debug)]
 pub struct Compiler<'a, 'ctx> {
-    pub builder: &'a Builder<'ctx>,
-    pub context: &'ctx Context,
     pub module: &'a Module<'ctx>,
-    pub stack: Vec<BasicValueEnum<'ctx>>,
+    builder: &'a Builder<'ctx>,
+    context: &'ctx Context,
+    procs: &'a Vec<Proc>,
+    stack: Vec<BasicValueEnum<'ctx>>,
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    pub fn new(builder: &'a Builder<'ctx>, context: &'ctx Context, module: &'a Module<'ctx>) -> Compiler<'a, 'ctx> {
+    pub fn new(builder: &'a Builder<'ctx>, context: &'ctx Context, module: &'a Module<'ctx>, procs: &'a Vec<Proc>) -> Compiler<'a, 'ctx> {
         Compiler {
+            module,
             builder,
             context,
-            module,
+            procs,
             stack: Vec::new(),
         }
     }
 
+    pub fn compile(&mut self) {
+        self.module.add_function(
+            "print",
+            self.context.i64_type().fn_type(
+                &[BasicMetadataTypeEnum::IntType(self.context.i64_type())],
+                false,
+            ),
+            None,
+        );
+        self.procs.iter().for_each(|proc| self.compile_proc(proc));
+    }
+
     pub fn compile_proc(&mut self, proc: &Proc) {
+        let saved_stack = self.stack.clone();
+        self.stack.clear();
+
         let function = self.module.add_function(
             &proc.name,
             self.context.i64_type().fn_type(&[], false),
@@ -88,5 +105,10 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.build_return(Some(&self.stack.pop().unwrap().into_int_value()));
 
         assert!(function.verify(true));
+        if !self.stack.is_empty() {
+            todo!("Procedures are hardcoded to return a single u64 value");
+        }
+
+        self.stack = saved_stack;
     }
 }

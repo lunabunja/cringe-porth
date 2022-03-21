@@ -1,5 +1,6 @@
 use chumsky::prelude::*;
 
+#[derive(Debug)]
 pub struct Proc {
     pub name: String,
     pub ops: Vec<Operation>,
