@@ -21,6 +21,7 @@ pub enum Operation<'a> {
     // Intrinsics
     Drop,
     Print,
+    Swap,
 }
 
 pub fn parser<'i>()
@@ -52,6 +53,7 @@ pub fn op_parser<'i>()
         just("idivmod").to(Operation::IDivMod),
         just("drop").to(Operation::Drop),
         just("print").to(Operation::Print),
+        just("swap").to(Operation::Swap),
         any().try_map(|s: &str, span| Ok(Operation::Integer(
             s.parse().map_err(|e| Simple::custom(span, format!("{}", e)))?
         ))),

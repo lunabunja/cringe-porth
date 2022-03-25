@@ -109,7 +109,14 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Operation::Print => {
                     let x = self.stack.pop().unwrap().into_int_value();
                     unimplemented!();
-                }
+                },
+                Operation::Swap => {
+                    let x = self.stack.pop().unwrap().into_int_value();
+                    let y = self.stack.pop().unwrap().into_int_value();
+
+                    self.stack.push(BasicValueEnum::IntValue(x));
+                    self.stack.push(BasicValueEnum::IntValue(y));
+                },
             }
         });
 
