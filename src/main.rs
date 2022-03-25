@@ -19,6 +19,8 @@ fn main() {
         }),
     )).unwrap();
 
+    eprintln!("{:?}", procs);
+
     let context = Context::create();
     let module = context.create_module(&filename);
     let builder = context.create_builder();

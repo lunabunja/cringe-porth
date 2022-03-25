@@ -1,7 +1,7 @@
-proc main in
-  69000 1000 divmod drop
-end
-
 proc blazeit in
   500 80 -
+end
+
+proc main in
+  69000 1000 divmod drop blazeit +
 end

@@ -56,6 +56,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         )
                     ))
                 },
+                Operation::Word(word) => {
+                    if let Some(proc) = self.module.get_function(word) {
+                        self.stack.push(
+                            // fixme: this doesn't handle void procs
+                            self.builder.build_call(proc, &[], "")
+                                .try_as_basic_value().left().unwrap()
+                        );
+                    } else {
+                        panic!("Unknown word {}", word);
+                    }
+                }
     
                 // Arithmetic
                 Operation::Add => {

@@ -3,12 +3,13 @@ use chumsky::prelude::*;
 #[derive(Debug)]
 pub struct Proc<'a> {
     pub name: &'a str,
-    pub ops: Vec<Operation>,
+    pub ops: Vec<Operation<'a>>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Operation {
+pub enum Operation<'a> {
     Integer(u64),
+    Word(&'a str),
 
     // Arithmetic
     Add,
@@ -41,7 +42,7 @@ pub fn proc_parser<'i>()
 }
 
 pub fn op_parser<'i>()
-    -> impl Parser<&'i str, Vec<Operation>, Error = Simple<&'i str>>
+    -> impl Parser<&'i str, Vec<Operation<'i>>, Error = Simple<&'i str>>
 {
     choice((
         just("+").to(Operation::Add),
@@ -54,5 +55,6 @@ pub fn op_parser<'i>()
         any().try_map(|s: &str, span| Ok(Operation::Integer(
             s.parse().map_err(|e| Simple::custom(span, format!("{}", e)))?
         ))),
+        filter(|s| *s != "end").map(Operation::Word)
     )).recover_with(skip_then_retry_until(["end"])).repeated()
 }
