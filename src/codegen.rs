@@ -7,7 +7,7 @@ pub struct Compiler<'a, 'ctx> {
     pub module: &'a Module<'ctx>,
     builder: &'a Builder<'ctx>,
     context: &'ctx Context,
-    procs: &'a Vec<Proc>,
+    procs: &'a Vec<Proc<'a>>,
     stack: Vec<BasicValueEnum<'ctx>>,
 }
 

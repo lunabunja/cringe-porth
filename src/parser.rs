@@ -1,8 +1,8 @@
 use chumsky::prelude::*;
 
 #[derive(Debug)]
-pub struct Proc {
-    pub name: String,
+pub struct Proc<'a> {
+    pub name: &'a str,
     pub ops: Vec<Operation>,
 }
 
@@ -22,29 +22,37 @@ pub enum Operation {
     Print,
 }
 
-pub fn parser() -> impl Parser<char, Vec<Proc>, Error = Simple<char>> {
-    proc_parser().repeated().then_ignore(end())
+pub fn parser<'i>()
+    -> impl Parser<&'i str, Vec<Proc<'i>>, Error = Simple<&'i str>>
+{
+    proc_parser().repeated()
 }
 
-pub fn proc_parser() -> impl Parser<char, Proc, Error = Simple<char>> {
+pub fn proc_parser<'i>()
+    -> impl Parser<&'i str, Proc<'i>, Error = Simple<&'i str>>
+{
     // todo: parse type signatures
-    text::keyword("proc")
-        .ignore_then(text::ident().padded())
-        .then_ignore(text::keyword("in").padded())
+    just("proc")
+        .ignore_then(any())
+        .then_ignore(just("in"))
         .then(op_parser())
-        .then_ignore(text::keyword("end").padded())
+        .then_ignore(just("end"))
         .map(|(name, ops)| Proc { name, ops })
 }
 
-pub fn op_parser() -> impl Parser<char, Vec<Operation>, Error = Simple<char>> {
+pub fn op_parser<'i>()
+    -> impl Parser<&'i str, Vec<Operation>, Error = Simple<&'i str>>
+{
     choice((
-        just('+').to(Operation::Add),
-        just('-').to(Operation::Sub),
-        just('*').to(Operation::Mul),
-        text::keyword("divmod").to(Operation::DivMod),
-        text::keyword("idivmod").to(Operation::IDivMod),
-        text::keyword("drop").to(Operation::Drop),
-        text::keyword("print").to(Operation::Print),
-        text::int(10).map(|s: String| Operation::Integer(s.parse().unwrap())),
-    )).then_ignore(just(' ').repeated()).padded().repeated()
+        just("+").to(Operation::Add),
+        just("-").to(Operation::Sub),
+        just("*").to(Operation::Mul),
+        just("divmod").to(Operation::DivMod),
+        just("idivmod").to(Operation::IDivMod),
+        just("drop").to(Operation::Drop),
+        just("print").to(Operation::Print),
+        any().try_map(|s: &str, span| Ok(Operation::Integer(
+            s.parse().map_err(|e| Simple::custom(span, format!("{}", e)))?
+        ))),
+    )).recover_with(skip_then_retry_until(["end"])).repeated()
 }
