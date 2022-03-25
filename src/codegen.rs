@@ -1,23 +1,28 @@
 use inkwell::{context::Context, module::Module, builder::Builder, values::BasicValueEnum, types::BasicMetadataTypeEnum};
 
-use crate::parser::{Operation, Proc};
+use crate::parser::{Operation, Proc, Definition};
 
 #[derive(Debug)]
 pub struct Compiler<'a, 'ctx> {
     pub module: &'a Module<'ctx>,
     builder: &'a Builder<'ctx>,
     context: &'ctx Context,
-    procs: &'a Vec<Proc<'a>>,
+    defs: &'a Vec<Definition<'a>>,
     stack: Vec<BasicValueEnum<'ctx>>,
 }
 
 impl<'a, 'ctx> Compiler<'a, 'ctx> {
-    pub fn new(builder: &'a Builder<'ctx>, context: &'ctx Context, module: &'a Module<'ctx>, procs: &'a Vec<Proc>) -> Compiler<'a, 'ctx> {
+    pub fn new(
+        builder: &'a Builder<'ctx>,
+        context: &'ctx Context,
+        module: &'a Module<'ctx>,
+        defs: &'a Vec<Definition>) -> Compiler<'a, 'ctx>
+    {
         Compiler {
             module,
             builder,
             context,
-            procs,
+            defs,
             stack: Vec::new(),
         }
     }
@@ -31,7 +36,12 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             ),
             None,
         );
-        self.procs.iter().for_each(|proc| self.compile_proc(proc));
+
+        self.defs.iter().for_each(|def| {
+            if let Definition::Proc(proc) = def {
+                self.compile_proc(proc);
+            }
+        });
     }
 
     pub fn compile_proc(&mut self, proc: &Proc) {
@@ -47,7 +57,20 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
 
-        proc.ops.iter().for_each(|op| {
+        self.compile_ops(&proc.ops);
+
+        self.builder.build_return(Some(&self.stack.pop().unwrap().into_int_value()));
+
+        assert!(function.verify(true));
+        if !self.stack.is_empty() {
+            todo!("Procedures are hardcoded to return a single u64 value");
+        }
+
+        self.stack = saved_stack;
+    }
+
+    pub fn compile_ops(&mut self, ops: &Vec<Operation>) {
+        ops.iter().for_each(|op| {
             match *op {
                 Operation::Integer(i) => {
                     self.stack.push(BasicValueEnum::IntValue(
@@ -64,7 +87,13 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                 .try_as_basic_value().left().unwrap()
                         );
                     } else {
-                        panic!("Unknown word {}", word);
+                        for def in self.defs {
+                            if let Definition::Const(constant) = def {
+                                if constant.name == word {
+                                    self.compile_ops(&constant.ops);
+                                }
+                            }
+                        }
                     }
                 }
     
@@ -119,14 +148,5 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 },
             }
         });
-
-        self.builder.build_return(Some(&self.stack.pop().unwrap().into_int_value()));
-
-        assert!(function.verify(true));
-        if !self.stack.is_empty() {
-            todo!("Procedures are hardcoded to return a single u64 value");
-        }
-
-        self.stack = saved_stack;
     }
 }

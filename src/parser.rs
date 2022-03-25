@@ -1,7 +1,19 @@
 use chumsky::prelude::*;
 
 #[derive(Debug)]
+pub enum Definition<'a> {
+    Proc(Proc<'a>),
+    Const(Const<'a>),
+}
+
+#[derive(Debug)]
 pub struct Proc<'a> {
+    pub name: &'a str,
+    pub ops: Vec<Operation<'a>>,
+}
+
+#[derive(Debug)]
+pub struct Const<'a> {
     pub name: &'a str,
     pub ops: Vec<Operation<'a>>,
 }
@@ -25,9 +37,12 @@ pub enum Operation<'a> {
 }
 
 pub fn parser<'i>()
-    -> impl Parser<&'i str, Vec<Proc<'i>>, Error = Simple<&'i str>>
+    -> impl Parser<&'i str, Vec<Definition<'i>>, Error = Simple<&'i str>>
 {
-    proc_parser().repeated()
+    choice((
+        proc_parser().map(Definition::Proc),
+        const_parser().map(Definition::Const),
+    )).repeated()
 }
 
 pub fn proc_parser<'i>()
@@ -40,6 +55,16 @@ pub fn proc_parser<'i>()
         .then(op_parser())
         .then_ignore(just("end"))
         .map(|(name, ops)| Proc { name, ops })
+}
+
+pub fn const_parser<'i>()
+    -> impl Parser<&'i str, Const<'i>, Error = Simple<&'i str>>
+{
+    just("const")
+        .ignore_then(any())
+        .then(op_parser())
+        .then_ignore(just("end"))
+        .map(|(name, ops)| Const { name, ops })
 }
 
 pub fn op_parser<'i>()
