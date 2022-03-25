@@ -32,6 +32,7 @@ pub enum Operation<'a> {
 
     // Intrinsics
     Drop,
+    Dup,
     Print,
     Swap,
 }
@@ -77,6 +78,7 @@ pub fn op_parser<'i>()
         just("divmod").to(Operation::DivMod),
         just("idivmod").to(Operation::IDivMod),
         just("drop").to(Operation::Drop),
+        just("dup").to(Operation::Dup),
         just("print").to(Operation::Print),
         just("swap").to(Operation::Swap),
         any().try_map(|s: &str, span| Ok(Operation::Integer(

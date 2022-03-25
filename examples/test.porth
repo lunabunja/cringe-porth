@@ -2,5 +2,5 @@ const /    divmod drop end
 const blazeit 500 80 - end
 
 proc main in
-  69000 1000 / blazeit +
+  69000 1000 / blazeit + dup print
 end

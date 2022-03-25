@@ -1,4 +1,4 @@
-use inkwell::{context::Context, module::Module, builder::Builder, values::BasicValueEnum, types::BasicMetadataTypeEnum};
+use inkwell::{context::Context, module::Module, builder::Builder, values::{BasicValueEnum, BasicMetadataValueEnum}, types::BasicMetadataTypeEnum};
 
 use crate::parser::{Operation, Proc, Definition};
 
@@ -87,15 +87,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                                 .try_as_basic_value().left().unwrap()
                         );
                     } else {
-                        for def in self.defs {
-                            if let Definition::Const(constant) = def {
-                                if constant.name == word {
-                                    self.compile_ops(&constant.ops);
-                                }
+                        if let Some(ops) = self.defs.iter()
+                            .find_map(|def| match def {
+                                Definition::Const(constant) => {
+                                    if constant.name != word {
+                                        None
+                                    } else {
+                                        Some(&constant.ops)
+                                    }
+                                },
+                                _ => None,
                             }
+                        ) {
+                            self.compile_ops(ops);
+                        } else {
+                            panic!("Unknown word: {}", word);
                         }
                     }
-                }
+                },
     
                 // Arithmetic
                 Operation::Add => {
@@ -135,9 +144,17 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Operation::Drop => {
                     self.stack.pop();
                 },
+                Operation::Dup => {
+                    self.stack.push(self.stack.last().unwrap().clone());
+                },
                 Operation::Print => {
                     let x = self.stack.pop().unwrap().into_int_value();
-                    unimplemented!();
+
+                    self.builder.build_call(
+                        self.module.get_function("print").unwrap(),
+                        &[BasicMetadataValueEnum::IntValue(x)],
+                        "print"
+                    );
                 },
                 Operation::Swap => {
                     let x = self.stack.pop().unwrap().into_int_value();
