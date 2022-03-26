@@ -10,6 +10,13 @@ pub enum Definition<'a> {
 pub struct Proc<'a> {
     pub name: &'a str,
     pub ops: Vec<Operation<'a>>,
+    pub inputs: Vec<Type>,
+    pub outputs: Vec<Type>,
+}
+
+#[derive(Debug, Clone)]
+pub enum Type {
+    Int,
 }
 
 #[derive(Debug)]
@@ -46,19 +53,28 @@ pub fn parser<'i>()
     )).repeated()
 }
 
-pub fn proc_parser<'i>()
+fn proc_parser<'i>()
     -> impl Parser<&'i str, Proc<'i>, Error = Simple<&'i str>>
 {
-    // todo: parse type signatures
     just("proc")
         .ignore_then(any())
+        .then(type_parser().repeated())
+        .then(just("--")
+            .ignore_then(type_parser().repeated().at_least(1))
+            .or_not())
         .then_ignore(just("in"))
         .then(op_parser())
         .then_ignore(just("end"))
-        .map(|(name, ops)| Proc { name, ops })
+        .map(|(((name, inputs), outputs), ops)| Proc {
+            name, ops, inputs, outputs: outputs.unwrap_or_default()
+        })
 }
 
-pub fn const_parser<'i>()
+fn type_parser<'i>() -> impl Parser<&'i str, Type, Error = Simple<&'i str>> {
+    just("int").to(Type::Int)
+}
+
+fn const_parser<'i>()
     -> impl Parser<&'i str, Const<'i>, Error = Simple<&'i str>>
 {
     just("const")
@@ -68,7 +84,7 @@ pub fn const_parser<'i>()
         .map(|(name, ops)| Const { name, ops })
 }
 
-pub fn op_parser<'i>()
+fn op_parser<'i>()
     -> impl Parser<&'i str, Vec<Operation<'i>>, Error = Simple<&'i str>>
 {
     choice((
