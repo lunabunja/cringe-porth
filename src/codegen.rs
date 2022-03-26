@@ -1,6 +1,6 @@
-use inkwell::{context::Context, module::Module, builder::Builder, values::{BasicValueEnum, BasicMetadataValueEnum}, types::BasicMetadataTypeEnum};
+use inkwell::{context::Context, module::Module, builder::Builder, values::{BasicValueEnum, BasicMetadataValueEnum}, types::{BasicMetadataTypeEnum, FunctionType, IntType}};
 
-use crate::parser::{Operation, Proc, Definition};
+use crate::parser::{Operation, Proc, Definition, Type};
 
 #[derive(Debug)]
 pub struct Compiler<'a, 'ctx> {
@@ -50,7 +50,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         let function = self.module.add_function(
             &proc.name,
-            self.context.i64_type().fn_type(&[], false),
+            types_to_fn_type(self.context, &proc.inputs, &proc.outputs),
             None
         );
 
@@ -59,12 +59,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.compile_ops(&proc.ops);
 
-        self.builder.build_return(Some(&self.stack.pop().unwrap().into_int_value()));
+        self.builder.build_return(Some(
+            &self.context.const_struct(&self.stack.clone(), false)
+        ));
 
         assert!(function.verify(true));
-        if !self.stack.is_empty() {
-            todo!("Procedures are hardcoded to return a single u64 value");
-        }
 
         self.stack = saved_stack;
     }
@@ -166,4 +165,24 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
             }
         });
     }
+}
+
+fn types_to_fn_type<'ctx>(
+    context: &'ctx Context,
+    in_types: &Vec<Type>,
+    out_types: &Vec<Type>) -> FunctionType<'ctx>
+{
+    context.struct_type(&convert_types(context, out_types), false)
+        .fn_type(&convert_types(context, in_types), false)
+}
+
+fn convert_types<'ctx, T: From<IntType<'ctx>>>(
+    context: &'ctx Context,
+    types: &Vec<Type>) -> Vec<T>
+{
+    types.iter().map(|t| {
+        match t {
+            Type::Int => context.i64_type().into(),
+        }
+    }).collect()
 }
