@@ -39,7 +39,9 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
         self.defs.iter().for_each(|def| {
             if let Definition::Proc(proc) = def {
-                self.compile_proc(proc);
+                if proc.name == "main" {
+                    self.compile_proc(proc);
+                }
             }
         });
     }
@@ -80,28 +82,31 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 },
                 Operation::Word(word) => {
                     if let Some(proc) = self.module.get_function(word) {
+                        // Procedure has been compiled before
                         self.stack.push(
                             // fixme: this doesn't handle void procs
                             self.builder.build_call(proc, &[], "")
                                 .try_as_basic_value().left().unwrap()
                         );
                     } else {
-                        if let Some(ops) = self.defs.iter()
-                            .find_map(|def| match def {
-                                Definition::Const(constant) => {
-                                    if constant.name != word {
-                                        None
-                                    } else {
-                                        Some(&constant.ops)
-                                    }
-                                },
-                                _ => None,
-                            }
-                        ) {
-                            self.compile_ops(ops);
-                        } else {
-                            panic!("Unknown word: {}", word);
-                        }
+                        self.defs.iter().for_each(|def| match def {
+                            Definition::Const(constant)
+                                => if constant.name == word
+                            {
+                                self.compile_ops(&constant.ops);
+                            },
+
+                            Definition::Proc(proc) => if proc.name == word {
+                                // Procedure has not been compiled before
+                                self.compile_proc(proc);
+
+                                // fixme: this doesn't handle void procs
+                                self.stack.push(self.builder.build_call(
+                                    self.module.get_function(word).unwrap(),
+                                    &[],
+                                    "").try_as_basic_value().left().unwrap());
+                            },
+                        });
                     }
                 },
     
