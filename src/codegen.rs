@@ -30,7 +30,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn compile(&mut self) {
         self.module.add_function(
             "print",
-            self.context.i64_type().fn_type(
+            self.context.void_type().fn_type(
                 &[BasicMetadataTypeEnum::IntType(self.context.i64_type())],
                 false,
             ),
@@ -50,6 +50,7 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let saved_stack = self.stack.clone();
         self.stack.clear();
 
+        eprintln!("Compiling proc {}: {:#?}", proc.name, proc);
         let function = self.module.add_function(
             &proc.name,
             types_to_fn_type(self.context, &proc.inputs, &proc.outputs),
@@ -59,14 +60,21 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         let entry = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(entry);
 
+        function.get_param_iter().for_each(|arg| self.stack.push(arg));
+        eprintln!("Stack: {:#?}", self.stack);
         self.compile_ops(&proc.ops);
 
-        self.builder.build_return(Some(
-            &self.context.const_struct(&self.stack.clone(), false)
-        ));
+        if self.stack.is_empty() {
+            self.builder.build_return(None);
+        } else if self.stack.len() == 1 {
+            self.builder.build_return(Some(&self.stack.pop().unwrap()));
+        } else {
+            self.builder.build_return(Some(
+                &self.context.const_struct(&self.stack.clone(), false)
+            ));
+        }
 
         assert!(function.verify(true));
-
         self.stack = saved_stack;
     }
 
@@ -83,11 +91,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                 Operation::Word(word) => {
                     if let Some(proc) = self.module.get_function(word) {
                         // Procedure has been compiled before
-                        self.stack.push(
-                            // fixme: this doesn't handle void procs
-                            self.builder.build_call(proc, &[], "")
-                                .try_as_basic_value().left().unwrap()
-                        );
+                        let arguments = proc.get_param_iter().map(|_| {
+                            self.stack.pop().unwrap().into()
+                        }).collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+
+                        if arguments.len() == 0 {
+                            self.builder.build_call(proc, &[], "");
+                        } else {
+                            self.stack.push(
+                                self.builder.build_call(proc, &arguments, "")
+                                    .try_as_basic_value().left().unwrap()
+                            );
+                        }
                     } else {
                         self.defs.iter().for_each(|def| match def {
                             Definition::Const(constant)
@@ -98,13 +113,42 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
                             Definition::Proc(proc) => if proc.name == word {
                                 // Procedure has not been compiled before
+                                let caller = self.builder.get_insert_block().unwrap();
                                 self.compile_proc(proc);
 
-                                // fixme: this doesn't handle void procs
-                                self.stack.push(self.builder.build_call(
-                                    self.module.get_function(word).unwrap(),
-                                    &[],
-                                    "").try_as_basic_value().left().unwrap());
+                                self.builder.position_at_end(caller);
+
+                                let fn_value = self.module.get_function(word).unwrap();
+
+                                let mut arguments = vec![];
+                                fn_value.get_param_iter().for_each(|_|
+                                    arguments.push(self.stack.pop().unwrap().into()));
+                                arguments.reverse();
+
+                                if let Some(ret_value) = self.builder.build_call(
+                                        fn_value,
+                                        &arguments,
+                                        ""
+                                    ).try_as_basic_value().left()
+                                {
+                                    if let BasicValueEnum::StructValue(struct_value) = ret_value {
+                                        // procedure returned multiple values
+                                        struct_value.get_type()
+                                            .get_field_types()
+                                            .iter()
+                                            .enumerate()
+                                            .for_each(|(i, _)|
+                                                self.stack.push(self.builder
+                                                    .build_extract_value(
+                                                        struct_value,
+                                                        i.try_into().unwrap(),
+                                                        ""
+                                                    ).unwrap())
+                                            );
+                                    } else {
+                                        self.stack.push(ret_value);
+                                    }
+                                }
                             },
                         });
                     }
@@ -152,11 +196,11 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     self.stack.push(self.stack.last().unwrap().clone());
                 },
                 Operation::Print => {
-                    let x = self.stack.pop().unwrap().into_int_value();
+                    let x = self.stack.pop().unwrap();
 
                     self.builder.build_call(
                         self.module.get_function("print").unwrap(),
-                        &[BasicMetadataValueEnum::IntValue(x)],
+                        &[x.into()],
                         "print"
                     );
                 },
@@ -177,8 +221,25 @@ fn types_to_fn_type<'ctx>(
     in_types: &Vec<Type>,
     out_types: &Vec<Type>) -> FunctionType<'ctx>
 {
-    context.struct_type(&convert_types(context, out_types), false)
-        .fn_type(&convert_types(context, in_types), false)
+    if out_types.is_empty() {
+        context.void_type().fn_type(&convert_types(context, in_types), false)
+    } else if out_types.len() == 1 {
+        type_to_fn_type(context, in_types, &out_types[0])
+    } else {
+        context.struct_type(&convert_types(context, out_types), false)
+            .fn_type(&convert_types(context, in_types), false)
+    }
+}
+
+fn type_to_fn_type<'ctx>(
+    context: &'ctx Context,
+    in_types: &Vec<Type>,
+    out_type: &Type) -> FunctionType<'ctx>
+{
+    match out_type {
+        Type::Int =>
+            context.i64_type().fn_type(&convert_types(context, in_types), false),
+    }
 }
 
 fn convert_types<'ctx, T: From<IntType<'ctx>>>(

@@ -2,5 +2,11 @@ const /    divmod drop end
 const blazeit 500 80 - end
 
 proc main in
-  69000 1000 / blazeit + print
+  69000 1000 / blazeit + dup 123 - dup&print-both print print
+end
+
+proc dup&print-both
+  int int -- int int
+in
+  dup swap print swap dup print swap
 end
