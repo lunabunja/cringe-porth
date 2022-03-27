@@ -38,15 +38,14 @@ fn main() {
     let builder = context.create_builder();
 
     let mut compiler = Compiler::new(&builder, &context, &module, &defs);
-    compiler.compile();
-
-    compiler.module.print_to_file("a.ll").unwrap();
     compiler.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
     compiler.module.set_triple(&triple);
+    compiler.compile();
 
     let pass_manager: PassManager<Module> = PassManager::create(());
     // todo: passes here
     pass_manager.run_on(&module);
 
+    compiler.module.print_to_file("a.ll").unwrap();
     target_machine.write_to_file(&module, FileType::Object, Path::new("a.out")).unwrap();
 }
