@@ -153,6 +153,28 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                         },
                     });
                 },
+
+                Operation::If(then_branch) => {
+                    let function = self.builder.get_insert_block().unwrap()
+                        .get_parent().unwrap();
+
+                    let then_block = self.context.append_basic_block(function, "then");
+                    let else_block = self.context.append_basic_block(function, "else");
+                    let cont_block = self.context.append_basic_block(function, "ifcont");
+
+                    let cond = self.stack.pop().unwrap().into_int_value();
+                    self.builder.build_conditional_branch(cond, then_block, else_block);
+
+                    self.builder.position_at_end(then_block);
+                    self.compile_ops(then_branch);
+                    self.builder.build_unconditional_branch(cont_block);
+
+                    self.builder.position_at_end(else_block);
+                    // fixme: implement else branches
+                    self.builder.build_unconditional_branch(cont_block);
+
+                    self.builder.position_at_end(cont_block);
+                },
     
                 // Arithmetic
                 Operation::Add => {

@@ -1,5 +1,9 @@
 const / divmod drop end
 
 proc main in
-  69000 1000 / 34 35 + = print
+  69000 1000 / 34 35 + = if
+    20 11 + 31 = if
+      420 print
+    end
+  end
 end

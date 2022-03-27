@@ -30,6 +30,8 @@ pub enum Operation<'a> {
     Integer(u64),
     Word(&'a str),
 
+    If(Vec<Operation<'a>>),
+
     // Arithmetic
     Add, Sub, Mul, DivMod, IDivMod,
     Equal,
@@ -84,20 +86,24 @@ fn const_parser<'i>()
 fn op_parser<'i>()
     -> impl Parser<&'i str, Vec<Operation<'i>>, Error = Simple<&'i str>>
 {
-    choice((
-        just("+").to(Operation::Add),
-        just("-").to(Operation::Sub),
-        just("*").to(Operation::Mul),
-        just("divmod").to(Operation::DivMod),
-        just("idivmod").to(Operation::IDivMod),
-        just("=").to(Operation::Equal),
-        just("drop").to(Operation::Drop),
-        just("dup").to(Operation::Dup),
-        just("print").to(Operation::Print),
-        just("swap").to(Operation::Swap),
-        any().try_map(|s: &str, span| Ok(Operation::Integer(
-            s.parse().map_err(|e| Simple::custom(span, format!("{}", e)))?
-        ))),
-        filter(|s| *s != "end").map(Operation::Word)
-    )).recover_with(skip_then_retry_until(["end"])).repeated()
+    recursive(|op_parser| {
+        choice((
+            just("+").to(Operation::Add),
+            just("-").to(Operation::Sub),
+            just("*").to(Operation::Mul),
+            just("divmod").to(Operation::DivMod),
+            just("idivmod").to(Operation::IDivMod),
+            just("=").to(Operation::Equal),
+            just("drop").to(Operation::Drop),
+            just("dup").to(Operation::Dup),
+            just("print").to(Operation::Print),
+            just("swap").to(Operation::Swap),
+            just("if").ignore_then(op_parser).then_ignore(just("end"))
+                .map(|ops| Operation::If(ops)),
+            any().try_map(|s: &str, span| Ok(Operation::Integer(
+                s.parse().map_err(|e| Simple::custom(span, format!("{}", e)))?
+            ))),
+            filter(|s| *s != "end").map(Operation::Word)
+        )).recover_with(skip_then_retry_until(["end"])).repeated()
+    })
 }
