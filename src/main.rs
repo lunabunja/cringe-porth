@@ -1,5 +1,7 @@
+use std::path::Path;
+
 use chumsky::{Parser, Stream};
-use inkwell::context::Context;
+use inkwell::{context::Context, targets::{Target, InitializationConfig, TargetMachine, RelocMode, CodeModel, FileType}, OptimizationLevel, passes::PassManager, module::Module};
 
 use crate::codegen::Compiler;
 
@@ -19,7 +21,17 @@ fn main() {
         }),
     )).unwrap();
 
-    eprintln!("{:?}", defs);
+    Target::initialize_all(&InitializationConfig::default());
+    // todo: enable all optimizations, change target based on arguments, etc.
+    let triple = TargetMachine::get_default_triple();
+    let target = Target::from_triple(&triple).unwrap();
+    let target_machine = target.create_target_machine(
+        &triple,
+        "generic",
+        "",
+        OptimizationLevel::Default,
+        RelocMode::Default,
+        CodeModel::Default).unwrap();
 
     let context = Context::create();
     let module = context.create_module(&filename);
@@ -28,5 +40,13 @@ fn main() {
     let mut compiler = Compiler::new(&builder, &context, &module, &defs);
     compiler.compile();
 
-    compiler.module.print_to_stderr();
+    compiler.module.print_to_file("a.ll").unwrap();
+    compiler.module.set_data_layout(&target_machine.get_target_data().get_data_layout());
+    compiler.module.set_triple(&triple);
+
+    let pass_manager: PassManager<Module> = PassManager::create(());
+    // todo: passes here
+    pass_manager.run_on(&module);
+
+    target_machine.write_to_file(&module, FileType::Object, Path::new("a.out")).unwrap();
 }

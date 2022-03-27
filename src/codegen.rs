@@ -1,4 +1,4 @@
-use inkwell::{context::Context, module::Module, builder::Builder, values::{BasicValueEnum, BasicMetadataValueEnum}, types::{BasicMetadataTypeEnum, FunctionType, IntType}};
+use inkwell::{context::Context, module::Module, builder::Builder, values::{BasicValueEnum, BasicMetadataValueEnum, AggregateValueEnum}, types::{BasicMetadataTypeEnum, FunctionType, IntType}};
 
 use crate::parser::{Operation, Proc, Definition, Type};
 
@@ -49,8 +49,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
     pub fn compile_proc(&mut self, proc: &Proc) {
         let saved_stack = self.stack.clone();
         self.stack.clear();
-
-        eprintln!("Compiling proc {}: {:#?}", proc.name, proc);
         let function = self.module.add_function(
             &proc.name,
             types_to_fn_type(self.context, &proc.inputs, &proc.outputs),
@@ -61,7 +59,6 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         self.builder.position_at_end(entry);
 
         function.get_param_iter().for_each(|arg| self.stack.push(arg));
-        eprintln!("Stack: {:#?}", self.stack);
         self.compile_ops(&proc.ops);
 
         if self.stack.is_empty() {
@@ -69,9 +66,18 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
         } else if self.stack.len() == 1 {
             self.builder.build_return(Some(&self.stack.pop().unwrap()));
         } else {
-            self.builder.build_return(Some(
-                &self.context.const_struct(&self.stack.clone(), false)
-            ));
+            let types = self.stack.iter()
+                .map(|v| v.get_type()).collect::<Vec<_>>();
+            let mut agg = AggregateValueEnum::StructValue(
+                self.context.struct_type(&types, false).get_undef());
+            self.stack.iter().enumerate().for_each(|(i, val)| {
+                agg = self.builder.build_insert_value(
+                    agg,
+                    *val,
+                    i.try_into().unwrap(),
+                    "").unwrap();
+            });
+            self.builder.build_return(Some(&agg));
         }
 
         assert!(function.verify(true));
