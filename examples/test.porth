@@ -1,12 +1,5 @@
-const /    divmod drop end
-const blazeit 500 80 - end
+const / divmod drop end
 
 proc main in
-  69000 1000 / blazeit + dup 123 - test print print
-end
-
-proc test
-  int int -- int int
-in
-  dup swap print swap dup print swap
+  69000 1000 / 34 35 + = print
 end

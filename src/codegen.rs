@@ -1,4 +1,4 @@
-use inkwell::{context::Context, module::Module, builder::Builder, values::{BasicValueEnum, BasicMetadataValueEnum, AggregateValueEnum}, types::{BasicMetadataTypeEnum, FunctionType, IntType}};
+use inkwell::{context::Context, module::Module, builder::Builder, values::{BasicValueEnum, BasicMetadataValueEnum, AggregateValueEnum}, types::{BasicMetadataTypeEnum, FunctionType, IntType}, IntPredicate};
 
 use crate::parser::{Operation, Proc, Definition, Type};
 
@@ -86,78 +86,72 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
 
     pub fn compile_ops(&mut self, ops: &Vec<Operation>) {
         ops.iter().for_each(|op| {
-            match *op {
-                Operation::Integer(i) => {
-                    self.stack.push(BasicValueEnum::IntValue(
-                        self.context.i64_type().const_int(
-                            i, false
-                        )
-                    ))
-                },
-                Operation::Word(word) => {
-                    if let Some(proc) = self.module.get_function(word) {
-                        // Procedure has been compiled before
-                        let arguments = proc.get_param_iter().map(|_| {
-                            self.stack.pop().unwrap().into()
-                        }).collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
+            match op {
+                Operation::Integer(i) => self.stack.push(self.context.i64_type().const_int(
+                    *i, false
+                ).into()),
+                Operation::Word(word) => if let Some(proc) = self.module.get_function(word) {
+                    // Procedure has been compiled before
+                    let arguments = proc.get_param_iter().map(|_| {
+                        self.stack.pop().unwrap().into()
+                    }).collect::<Vec<BasicMetadataValueEnum<'ctx>>>();
 
-                        if arguments.len() == 0 {
-                            self.builder.build_call(proc, &[], "");
-                        } else {
-                            self.stack.push(
-                                self.builder.build_call(proc, &arguments, "")
-                                    .try_as_basic_value().left().unwrap()
-                            );
-                        }
+                    if arguments.len() == 0 {
+                        self.builder.build_call(proc, &[], "");
                     } else {
-                        self.defs.iter().for_each(|def| match def {
-                            Definition::Const(constant)
-                                => if constant.name == word
-                            {
-                                self.compile_ops(&constant.ops);
-                            },
-
-                            Definition::Proc(proc) => if proc.name == word {
-                                // Procedure has not been compiled before
-                                let caller = self.builder.get_insert_block().unwrap();
-                                self.compile_proc(proc);
-
-                                self.builder.position_at_end(caller);
-
-                                let fn_value = self.module.get_function(word).unwrap();
-
-                                let mut arguments = vec![];
-                                fn_value.get_param_iter().for_each(|_|
-                                    arguments.push(self.stack.pop().unwrap().into()));
-                                arguments.reverse();
-
-                                if let Some(ret_value) = self.builder.build_call(
-                                        fn_value,
-                                        &arguments,
-                                        ""
-                                    ).try_as_basic_value().left()
-                                {
-                                    if let BasicValueEnum::StructValue(struct_value) = ret_value {
-                                        // procedure returned multiple values
-                                        struct_value.get_type()
-                                            .get_field_types()
-                                            .iter()
-                                            .enumerate()
-                                            .for_each(|(i, _)|
-                                                self.stack.push(self.builder
-                                                    .build_extract_value(
-                                                        struct_value,
-                                                        i.try_into().unwrap(),
-                                                        ""
-                                                    ).unwrap())
-                                            );
-                                    } else {
-                                        self.stack.push(ret_value);
-                                    }
-                                }
-                            },
-                        });
+                        self.stack.push(
+                            self.builder.build_call(proc, &arguments, "")
+                                .try_as_basic_value().left().unwrap()
+                        );
                     }
+                } else {
+                    self.defs.iter().for_each(|def| match def {
+                        Definition::Const(constant)
+                            => if constant.name == *word
+                        {
+                            self.compile_ops(&constant.ops);
+                        },
+
+                        Definition::Proc(proc) => if proc.name == *word {
+                            // Procedure has not been compiled before
+                            let caller = self.builder.get_insert_block().unwrap();
+                            self.compile_proc(proc);
+
+                            self.builder.position_at_end(caller);
+
+                            let fn_value = self.module.get_function(word).unwrap();
+
+                            let mut arguments = vec![];
+                            fn_value.get_param_iter().for_each(|_|
+                                arguments.push(self.stack.pop().unwrap().into()));
+                            arguments.reverse();
+
+                            if let Some(ret_value) = self.builder.build_call(
+                                    fn_value,
+                                    &arguments,
+                                    ""
+                                ).try_as_basic_value().left()
+                            {
+                                if let BasicValueEnum::StructValue(struct_value) = ret_value {
+                                    // procedure returned multiple values
+                                    struct_value.get_type()
+                                        .get_field_types()
+                                        .iter()
+                                        .enumerate()
+                                        .for_each(|(i, _)|
+                                            self.stack.push(self.builder
+                                                .build_extract_value(
+                                                    struct_value,
+                                                    i.try_into().unwrap(),
+                                                    ""
+                                                ).unwrap())
+                                        );
+                                } else {
+                                    self.stack.push(ret_value);
+                                }
+                            }
+                        },
+                    });
                 },
     
                 // Arithmetic
@@ -165,33 +159,43 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     let y = self.stack.pop().unwrap().into_int_value();
                     let x = self.stack.pop().unwrap().into_int_value();
     
-                    self.stack.push(BasicValueEnum::IntValue(self.builder.build_int_add(x, y, "tmpadd")));
+                    self.stack.push(self.builder.build_int_add(x, y, "tmpadd").into());
                 },
                 Operation::Sub => {
                     let y = self.stack.pop().unwrap().into_int_value();
                     let x = self.stack.pop().unwrap().into_int_value();
     
-                    self.stack.push(BasicValueEnum::IntValue(self.builder.build_int_sub(x, y, "tmpsub")));
+                    self.stack.push(self.builder.build_int_sub(x, y, "tmpsub").into());
                 },
                 Operation::Mul => {
                     let y = self.stack.pop().unwrap().into_int_value();
                     let x = self.stack.pop().unwrap().into_int_value();
     
-                    self.stack.push(BasicValueEnum::IntValue(self.builder.build_int_mul(x, y, "tmpmul")));
+                    self.stack.push(self.builder.build_int_mul(x, y, "tmpmul").into());
                 },
                 Operation::DivMod => {
                     let y = self.stack.pop().unwrap().into_int_value();
                     let x = self.stack.pop().unwrap().into_int_value();
     
-                    self.stack.push(BasicValueEnum::IntValue(self.builder.build_int_unsigned_div(x, y, "tmpdiv")));
-                    self.stack.push(BasicValueEnum::IntValue(self.builder.build_int_unsigned_rem(x, y, "tmpmod")));
+                    self.stack.push(self.builder.build_int_unsigned_div(x, y, "tmpdiv").into());
+                    self.stack.push(self.builder.build_int_unsigned_rem(x, y, "tmpmod").into());
                 },
                 Operation::IDivMod => {
                     let y = self.stack.pop().unwrap().into_int_value();
                     let x = self.stack.pop().unwrap().into_int_value();
     
-                    self.stack.push(BasicValueEnum::IntValue(self.builder.build_int_signed_div(x, y, "tmpidiv")));
-                    self.stack.push(BasicValueEnum::IntValue(self.builder.build_int_signed_rem(x, y, "tmpimod")));
+                    self.stack.push(self.builder.build_int_signed_div(x, y, "tmpidiv").into());
+                    self.stack.push(self.builder.build_int_signed_rem(x, y, "tmpimod").into());
+                },
+                Operation::Equal => {
+                    let y = self.stack.pop().unwrap().into_int_value();
+                    let x = self.stack.pop().unwrap().into_int_value();
+
+                    self.stack.push(self.builder.build_int_compare(
+                        IntPredicate::EQ,
+                        x,
+                        y,
+                        "tmpeq").into());
                 },
 
                 // Intrinsics
@@ -214,8 +218,8 @@ impl<'a, 'ctx> Compiler<'a, 'ctx> {
                     let x = self.stack.pop().unwrap().into_int_value();
                     let y = self.stack.pop().unwrap().into_int_value();
 
-                    self.stack.push(BasicValueEnum::IntValue(x));
-                    self.stack.push(BasicValueEnum::IntValue(y));
+                    self.stack.push(x.into());
+                    self.stack.push(y.into());
                 },
             }
         });

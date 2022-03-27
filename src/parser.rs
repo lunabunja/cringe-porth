@@ -31,11 +31,8 @@ pub enum Operation<'a> {
     Word(&'a str),
 
     // Arithmetic
-    Add,
-    Sub,
-    Mul,
-    DivMod,
-    IDivMod,
+    Add, Sub, Mul, DivMod, IDivMod,
+    Equal,
 
     // Intrinsics
     Drop,
@@ -93,6 +90,7 @@ fn op_parser<'i>()
         just("*").to(Operation::Mul),
         just("divmod").to(Operation::DivMod),
         just("idivmod").to(Operation::IDivMod),
+        just("=").to(Operation::Equal),
         just("drop").to(Operation::Drop),
         just("dup").to(Operation::Dup),
         just("print").to(Operation::Print),
