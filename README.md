@@ -19,7 +19,7 @@ will happily accept PRs that focus on performance, at this stage, optimization
 isn't a priority.
 - Error handling. Assume the input is already valid Porth code. The goal is to
 bootstrap porth, which will be valid Porth code anyway.
-- Extenting the language. Do not add new features to Porth, if it is believed
+- Extending the language. Do not add new features to Porth, if it is believed
 that the feature is worth implementing, first shoot an issue to porth that
 explains the feature, optionally shoot a PR that implements it, and if porth
 accepts the feature, then it can be implemented in cringe-porth.
